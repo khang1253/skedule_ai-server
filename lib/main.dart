@@ -1,24 +1,24 @@
-import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; // <-- Import the package
-import 'features/authentication/screens/login_screen.dart';
+// lib/main.dart
 
-// The main function now needs to be `async`
+import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:skedule/auth_gate.dart'; // <<< SỬA IMPORT
+
 Future<void> main() async {
-  // This line is required to ensure that everything is set up
-  // before we initialize Supabase.
+  await dotenv.load(fileName: ".env");
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase
-
   await Supabase.initialize(
-    url: 'https://qlajfnrhmrrztiwvzlim.supabase.co',       // <-- Paste your URL here
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsYWpmbnJobXJyenRpd3Z6bGltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4MTg4NTksImV4cCI6MjA3NTM5NDg1OX0.23JqnFRYtO8-SNGeXOlODtjgo-yGNXY_adbLo01vVGM', // <-- Paste your Anon Key here
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
   runApp(const MyApp());
 }
 
-// The rest of your file (class MyApp, etc.) stays the same.
+final supabase = Supabase.instance.client;
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -31,7 +31,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      home: const LoginScreen(),
+      home: const AuthGate(), // <<< THAY LoginScreen BẰNG AuthGate
     );
   }
 }

@@ -1,8 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; // <-- Add this line
-import 'package:skedule/home/screens/home_screen.dart';
+// lib/features/authentication/screens/login_screen.dart
 
-// STEP 1: Convert to a StatefulWidget
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../main.dart';
+import 'signup_screen.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
 
@@ -10,18 +12,59 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
+// Thêm hàm này vào bên trong class State của bạn
+
+String _translateAuthException(AuthException e) {
+  // Mặc định là một câu thông báo chung
+  String friendlyMessage = 'Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.';
+
+  if (e.message.contains('Invalid login credentials')) {
+    friendlyMessage = 'Email hoặc mật khẩu không chính xác.';
+  } else if (e.message.contains('User already registered')) {
+    friendlyMessage = 'Email này đã được đăng ký. Vui lòng chọn email khác.';
+  } else if (e.message.contains('Password should be at least 6 characters')) {
+    friendlyMessage = 'Mật khẩu phải có ít nhất 6 ký tự.';
+  }
+  // Bạn có thể thêm các trường hợp khác ở đây
+
+  return friendlyMessage;
+}
+
 class _LoginScreenState extends State<LoginScreen> {
-  // STEP 2: Create TextEditingControllers
-  // We add _ to make them private to this class
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _isLoading = false;
 
-  // It's good practice to dispose of controllers when the widget is removed
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _signIn() async {
+    setState(() { _isLoading = true; });
+
+    try {
+      await supabase.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+    } on AuthException catch (e) {
+      if (mounted) {
+        // Gọi hàm biên dịch trước khi hiển thị
+        final friendlyMessage = _translateAuthException(e);
+        _showErrorSnackBar(friendlyMessage);
+      }
+    }  finally {
+      if (mounted) { setState(() { _isLoading = false; }); }
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
   }
 
   @override
@@ -32,18 +75,14 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildLoginCard(context),
-              ],
-            ),
+            child: _buildLoginCard(context), // <<< Bây giờ hàm này đã có nội dung
           ),
         ),
       ),
     );
   }
 
+  // === PHỤC HỒI LẠI GIAO DIỆN CỦA BẠN ===
   Widget _buildLoginCard(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(maxWidth: 400),
@@ -65,97 +104,29 @@ class _LoginScreenState extends State<LoginScreen> {
           const CircleAvatar(
             radius: 30,
             backgroundColor: Color(0xFF4A6C8B),
-            child: Text(
-              'S',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+            child: Text('S', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Welcome to Skedule',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF333333),
-            ),
-          ),
+          const Text('Welcome to Skedule', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF333333))),
           const SizedBox(height: 8),
-          Text(
-            'Sign in to your account',
-            style: TextStyle(color: Colors.grey[600]),
-          ),
+          Text('Sign in to your account', style: TextStyle(color: Colors.grey[600])),
           const SizedBox(height: 32),
-
-          // STEP 3: Attach the controllers to the TextFields
-          _buildTextField(
-            label: 'Email',
-            controller: _emailController, // Attach email controller
-          ),
+          _buildTextField(label: 'Email', controller: _emailController),
           const SizedBox(height: 16),
-          _buildTextField(
-            label: 'Password',
-            controller: _passwordController, // Attach password controller
-            isObscure: true,
-          ),
+          _buildTextField(label: 'Password', controller: _passwordController, isObscure: true),
           const SizedBox(height: 24),
-
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
-                onPressed: () async { // Make the function async
-                  // Get the text from the controllers
-                  final email = _emailController.text.trim();
-                  final password = _passwordController.text.trim();
-
-                  // Show a loading indicator (optional but good UX)
-                  // TODO: Add a loading indicator
-
-                  try {
-                    // This is the Supabase sign-in call
-                    final AuthResponse res = await Supabase.instance.client.auth.signInWithPassword(
-                      email: email,
-                      password: password,
-                    );
-
-                    // If we reach here, sign-in was successful
-                    final user = res.user;
-                    print('Sign-in successful for: ${user?.email}');
-
-                    if (mounted) { // A best-practice check
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (context) => const HomeScreen()),
-                      );
-                    }
-
-                  } catch (e) {
-                    // If an error occurs (e.g., wrong password), it will be caught here
-                    print('Error signing in: $e');
-
-                    // TODO: Show a user-friendly error dialog
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Sign-in failed: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                },
-
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : ElevatedButton(
+              onPressed: _signIn,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4A6C8B),
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              child: const Text(
-                'Sign In',
-                style: TextStyle(fontSize: 16, color: Colors.white),
-              ),
+              child: const Text('Sign In', style: TextStyle(fontSize: 16, color: Colors.white)),
             ),
           ),
           const SizedBox(height: 24),
@@ -164,22 +135,17 @@ class _LoginScreenState extends State<LoginScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () {
-                // TODO: Implement Google Sign In logic
-              },
-              // NOTE: For this to work, you need a 'assets' folder with a 'google_logo.png' image
-              // For now, we'll just show an icon.
-              icon: const Icon(Icons.g_mobiledata),
-              label: const Text(
-                'Continue with Google',
-                style: TextStyle(color: Color(0xFF333333), fontSize: 16),
+              onPressed: () { /* TODO: Google Sign In */ },
+              icon: Image.asset(
+                'assets/google_logo.png',
+                height: 24.0, // Thêm chiều cao để logo không quá lớn
+                width: 24.0,
               ),
+              label: const Text('Continue with Google', style: TextStyle(color: Color(0xFF333333), fontSize: 16)),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 side: BorderSide(color: Colors.grey[300]!),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
             ),
           ),
@@ -190,15 +156,11 @@ class _LoginScreenState extends State<LoginScreen> {
               const Text("Don't have an account?"),
               TextButton(
                 onPressed: () {
-                  // TODO: Navigate to Sign Up screen
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const SignUpScreen()),
+                  );
                 },
-                child: const Text(
-                  'Sign up',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF4A6C8B),
-                  ),
-                ),
+                child: const Text('Sign up', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4A6C8B))),
               ),
             ],
           ),
@@ -207,53 +169,31 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Updated helper method to accept a controller
-  Widget _buildTextField({
-    required String label,
-    required TextEditingController controller,
-    bool isObscure = false,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF333333),
-          ),
+  Widget _buildTextField({required String label, required TextEditingController controller, bool isObscure = false}) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF333333))),
+      const SizedBox(height: 8),
+      TextField(
+        controller: controller,
+        obscureText: isObscure,
+        decoration: InputDecoration(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          filled: true,
+          fillColor: Colors.grey[100],
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
         ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller, // Assign the controller here
-          obscureText: isObscure,
-          decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            filled: true,
-            fillColor: Colors.grey[100],
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-      ],
-    );
+      ),
+    ]);
   }
 
   Widget _buildDivider() {
-    return Row(
-      children: [
-        const Expanded(child: Divider()),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Text(
-            'OR CONTINUE WITH',
-            style: TextStyle(color: Colors.grey[500], fontSize: 12),
-          ),
-        ),
-        const Expanded(child: Divider()),
-      ],
-    );
+    return Row(children: [
+      const Expanded(child: Divider()),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        child: Text('OR CONTINUE WITH', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+      ),
+      const Expanded(child: Divider()),
+    ]);
   }
 }

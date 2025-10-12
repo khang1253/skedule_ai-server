@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:skedule/auth_gate.dart'; // <<< SỬA IMPORT
+import 'package:skedule/auth_gate.dart'; // <<< Sửa import
 
 Future<void> main() async {
   await dotenv.load(fileName: ".env");
@@ -31,7 +31,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      home: const AuthGate(), // <<< THAY LoginScreen BẰNG AuthGate
+      home: const AuthGate(), // <<< Bắt đầu với AuthGate
     );
   }
 }

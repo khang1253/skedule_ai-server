@@ -1,10 +1,12 @@
-import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/material.dart'; // Đảm bảo đường dẫn đúng đến file main.dart
+// lib/screens/home/home_screen.dart
 
-import 'package:skedule/main.dart';
+import 'package:flutter/material.dart';
+// 1. Import package đúng
+import 'package:draggable_fab/draggable_fab.dart';
+// 2. Dọn dẹp và sửa lại đường dẫn import cho nhất quán
+import 'package:skedule/home/screens/ai_agent_screen.dart';
+import 'package:skedule/home/screens/dashboard_page.dart';
+import 'package:skedule/home/screens/preferences_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,155 +16,111 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final TextEditingController _textController = TextEditingController();
-  final List<Map<String, String>> _messages = [];
-  bool _isLoading = false;
+  int _selectedIndex = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _messages.insert(0, {"sender": "AI", "text": "Chào bạn, tôi có thể giúp gì cho lịch trình của bạn?"});
-  }
+  static final List<Widget> _mainPages = <Widget>[
+    const DashboardPage(),
+    const Center(child: Text('Calendar Page')),
+    const Center(child: Text('Notes Page')),
+  ];
 
-  // === HÀM ĐĂNG XUẤT MỚI ===
-  Future<void> _signOut() async {
-    try {
-      await supabase.auth.signOut();
-    } on AuthException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(error.message),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ));
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('Đã xảy ra lỗi khi đăng xuất'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ));
-      }
-    }
-  }
-
-  Future<void> _handleSubmitted(String text) async {
-    // ... (Giữ nguyên toàn bộ logic của hàm này)
-    if (text.isEmpty) return;
-
-    _textController.clear();
-    setState(() {
-      _messages.insert(0, {"sender": "You", "text": text});
-      _isLoading = true;
-    });
-
-    try {
-      const ngrokUrl = 'https://oversusceptibly-dire-maryrose.ngrok-free.dev/chat';
-      final session = supabase.auth.currentSession;
-      if (session == null) {
-        setState(() { _messages.insert(0, {"sender": "AI", "text": "Lỗi: Phiên đăng nhập đã hết hạn."}); });
-        return;
-      }
-      final accessToken = session.accessToken;
-
-      final response = await http.post(
-        Uri.parse(ngrokUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: jsonEncode({'prompt': text}),
-      );
-
-      String aiResponseText;
-      if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes));
-        aiResponseText = data['response'] ?? 'Lỗi: Không nhận được phản hồi.';
-      } else {
-        aiResponseText = 'Lỗi: ${response.statusCode}. Không thể kết nối đến server.';
-      }
-
-      setState(() {
-        _messages.insert(0, {"sender": "AI", "text": aiResponseText});
-      });
-    } catch (e) {
-      setState(() {
-        _messages.insert(0, {"sender": "AI", "text": "Lỗi kết nối: $e"});
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  Widget _buildTextComposer() {
-    // ... (Giữ nguyên code của widget này)
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-      child: Row(
-        children: [
-          Flexible(
-            child: TextField(
-              controller: _textController,
-              onSubmitted: _isLoading ? null : _handleSubmitted,
-              decoration: const InputDecoration.collapsed(hintText: 'Nhập yêu cầu cho AI...'),
-              enabled: !_isLoading,
-            ),
-          ),
-          IconButton(
-            icon: _isLoading ? const CircularProgressIndicator() : const Icon(Icons.send),
-            onPressed: _isLoading ? null : () => _handleSubmitted(_textController.text),
-          ),
-        ],
+  void _showPreferencesSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      builder: (context) {
+        return const PreferencesSheet();
+      },
     );
+  }
+
+  void _onNavItemTapped(int index) {
+    if (index == 3) {
+      _showPreferencesSheet();
+    } else {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Skedule AI'),
-        // === THÊM NÚT ĐĂNG XUẤT VÀO ĐÂY ===
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _signOut,
-            tooltip: 'Đăng xuất',
-          )
-        ],
-      ),
-      body: Column(
-        // ... (Giữ nguyên code phần body)
+      // 3. Đặt bong bóng chat AI vào đây, nó sẽ nổi trên body
+      body: Stack(
         children: [
-          Flexible(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(8.0),
-              reverse: true,
-              itemCount: _messages.length,
-              itemBuilder: (_, int index) {
-                final message = _messages[index];
-                final isUserMessage = message['sender'] == 'You';
+          // Lớp nền: các trang chính của bạn (Dashboard, Calendar, ...)
+          IndexedStack(
+            index: _selectedIndex,
+            children: _mainPages,
+          ),
 
-                return Align(
-                  alignment: isUserMessage ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-                    padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 14.0),
-                    decoration: BoxDecoration(
-                      color: isUserMessage ? Colors.blue[100] : Colors.grey[200],
-                      borderRadius: BorderRadius.circular(16.0),
-                    ),
-                    child: Text(message['text'] ?? ''),
-                  ),
-                );
-              },
+          // Lớp nổi: Bong bóng chat AI, căn ở góc dưới bên phải
+          // Widget này không thể kéo thả, nhưng sẽ cố định ở vị trí đẹp
+          Align(
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              // Thêm padding để không bị che bởi Bottom Nav Bar
+              padding: const EdgeInsets.only(right: 20, bottom: 90),
+              child: FloatingActionButton(
+                heroTag: 'ai_fab', // Dùng heroTag khác để tránh lỗi
+                mini: true, // Kích thước nhỏ như bong bóng chat
+                backgroundColor: Colors.purple,
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const AiAgentScreen()),
+                  );
+                },
+                child: const Icon(Icons.auto_awesome, color: Colors.white),
+              ),
             ),
           ),
-          const Divider(height: 1.0),
-          _buildTextComposer(),
         ],
       ),
+
+      // 4. Sử dụng DraggableFab cho nút "Thêm Task" chính
+      floatingActionButton: DraggableFab(
+        child: FloatingActionButton(
+          backgroundColor: const Color(0xFF4A6C8B),
+          onPressed: () {
+            // TODO: Mở màn hình tạo task mới
+          },
+          shape: const CircleBorder(),
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8.0,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: <Widget>[
+            _buildNavItem(icon: Icons.dashboard_rounded, label: 'Dashboard', index: 0),
+            _buildNavItem(icon: Icons.calendar_month_rounded, label: 'Calendar', index: 1),
+            const SizedBox(width: 48), // Khoảng trống cho FAB chính
+            _buildNavItem(icon: Icons.note_alt_rounded, label: 'Notes', index: 2),
+            _buildNavItem(icon: Icons.settings_rounded, label: 'Preferences', index: 3),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem({required IconData icon, required String label, required int index}) {
+    final isSelected = _selectedIndex == index && index != 3;
+    return IconButton(
+      icon: Icon(
+        icon,
+        color: isSelected ? const Color(0xFF4A6C8B) : Colors.grey.shade400,
+        size: 28,
+      ),
+      onPressed: () => _onNavItemTapped(index),
+      tooltip: label,
     );
   }
 }

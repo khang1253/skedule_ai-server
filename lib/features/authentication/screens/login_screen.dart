@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../main.dart';
+import 'package:skedule/main.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -10,24 +10,6 @@ class LoginScreen extends StatefulWidget {
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
-}
-
-// Thêm hàm này vào bên trong class State của bạn
-
-String _translateAuthException(AuthException e) {
-  // Mặc định là một câu thông báo chung
-  String friendlyMessage = 'Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.';
-
-  if (e.message.contains('Invalid login credentials')) {
-    friendlyMessage = 'Email hoặc mật khẩu không chính xác.';
-  } else if (e.message.contains('User already registered')) {
-    friendlyMessage = 'Email này đã được đăng ký. Vui lòng chọn email khác.';
-  } else if (e.message.contains('Password should be at least 6 characters')) {
-    friendlyMessage = 'Mật khẩu phải có ít nhất 6 ký tự.';
-  }
-  // Bạn có thể thêm các trường hợp khác ở đây
-
-  return friendlyMessage;
 }
 
 class _LoginScreenState extends State<LoginScreen> {
@@ -42,31 +24,76 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // --- CÁC HÀM LOGIC (Giữ nguyên) ---
+  String _translateAuthException(AuthException e) {
+    if (e.message.contains('Invalid login credentials')) {
+      return 'Email hoặc mật khẩu không chính xác.';
+    }
+    return 'Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.';
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  Future<void> _googleSignIn() async {
+    try {
+      await supabase.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: 'io.supabase.skedule://login-callback',
+      );
+    } on AuthException catch (e) {
+      _showErrorSnackBar(_translateAuthException(e));
+    }
+  }
+
   Future<void> _signIn() async {
     setState(() { _isLoading = true; });
-
     try {
       await supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
     } on AuthException catch (e) {
-      if (mounted) {
-        // Gọi hàm biên dịch trước khi hiển thị
-        final friendlyMessage = _translateAuthException(e);
-        _showErrorSnackBar(friendlyMessage);
-      }
-    }  finally {
+      _showErrorSnackBar(_translateAuthException(e));
+    } finally {
       if (mounted) { setState(() { _isLoading = false; }); }
     }
   }
 
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+  Future<void> _forgotPassword() async {
+    final emailForReset = _emailController.text.trim();
+    if (emailForReset.isEmpty || !emailForReset.contains('@')) {
+      _showErrorSnackBar('Vui lòng nhập email của bạn vào ô Email trước.');
+      return;
+    }
+
+    setState(() { _isLoading = true; });
+    try {
+      await supabase.auth.resetPasswordForEmail(
+        emailForReset,
+        redirectTo: 'io.supabase.skedule://login-callback',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Đã gửi link đặt lại mật khẩu. Vui lòng kiểm tra email.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } on AuthException catch(e) {
+      _showErrorSnackBar(_translateAuthException(e));
+    } finally {
+      if (mounted) { setState(() { _isLoading = false; }); }
+    }
   }
 
+  // --- GIAO DIỆN ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -75,14 +102,13 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: _buildLoginCard(context), // <<< Bây giờ hàm này đã có nội dung
+            child: _buildLoginCard(context),
           ),
         ),
       ),
     );
   }
 
-  // === PHỤC HỒI LẠI GIAO DIỆN CỦA BẠN ===
   Widget _buildLoginCard(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(maxWidth: 400),
@@ -90,23 +116,22 @@ class _LoginScreenState extends State<LoginScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CircleAvatar(
-            radius: 30,
-            backgroundColor: Color(0xFF4A6C8B),
-            child: Text('S', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-          ),
+          // === THAY ĐỔI LOGO TẠI ĐÂY ===
+          // Từ CircleAvatar...
+          // const CircleAvatar(
+          //   radius: 30, backgroundColor: Color(0xFF4A6C8B),
+          //   child: Text('S', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+          // ),
+          // ...thành Image.asset
+          Image.asset('assets/app_logo.jpg', height: 60),
+          // =============================
           const SizedBox(height: 16),
+          // Sửa lại tên app cho nhất quán
           const Text('Welcome to Skedule', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF333333))),
           const SizedBox(height: 8),
           Text('Sign in to your account', style: TextStyle(color: Colors.grey[600])),
@@ -114,7 +139,19 @@ class _LoginScreenState extends State<LoginScreen> {
           _buildTextField(label: 'Email', controller: _emailController),
           const SizedBox(height: 16),
           _buildTextField(label: 'Password', controller: _passwordController, isObscure: true),
-          const SizedBox(height: 24),
+
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _isLoading ? null : _forgotPassword,
+              child: const Text(
+                'Forgot Password?',
+                style: TextStyle(color: Color(0xFF4A6C8B)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
           SizedBox(
             width: double.infinity,
             child: _isLoading
@@ -135,12 +172,8 @@ class _LoginScreenState extends State<LoginScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () { /* TODO: Google Sign In */ },
-              icon: Image.asset(
-                'assets/google_logo.png',
-                height: 24.0, // Thêm chiều cao để logo không quá lớn
-                width: 24.0,
-              ),
+              onPressed: _isLoading ? null : _googleSignIn,
+              icon: Image.asset('assets/google_logo.png', height: 24.0, width: 24.0),
               label: const Text('Continue with Google', style: TextStyle(color: Color(0xFF333333), fontSize: 16)),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -156,9 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const Text("Don't have an account?"),
               TextButton(
                 onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const SignUpScreen()),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SignUpScreen()));
                 },
                 child: const Text('Sign up', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4A6C8B))),
               ),
@@ -169,17 +200,16 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // --- WIDGETS PHỤ (Giữ nguyên) ---
   Widget _buildTextField({required String label, required TextEditingController controller, bool isObscure = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF333333))),
       const SizedBox(height: 8),
       TextField(
-        controller: controller,
-        obscureText: isObscure,
+        controller: controller, obscureText: isObscure,
         decoration: InputDecoration(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          filled: true,
-          fillColor: Colors.grey[100],
+          filled: true, fillColor: Colors.grey[100],
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
         ),
       ),

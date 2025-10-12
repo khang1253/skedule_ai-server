@@ -17,33 +17,33 @@ dependencies:
   # UI & Utility Packages
   cupertino_icons: ^1.0.8
   flutter_dotenv: ^5.1.0
-  draggable_fab: ^0.1.4 # <-- 1. THIS IS THE CORRECT PACKAGE NAME
+  draggable_fab: ^0.1.4 # <-- Correct package name
   flutter_launcher_icons: ^0.13.1
-  flutter_native_splash: ^2.4.0 # Added this for your splash screen
+  flutter_native_splash: ^2.4.0 # For splash screen
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
 
-# The following section is specific to Flutter.
+# Flutter section
 flutter:
   uses-material-design: true
 
-  # 2. CORRECT INDENTATION FOR ASSETS
+  # Assets (indentation and directory format are correct)
   assets:
     - assets/google_logo.png
-    - assets/app_logo.jpg # It's better to declare the directory
+    - assets/app_logo.jpg
     - .env
 
-# 3. THIS BLOCK MUST BE OUTSIDE AND AT THE SAME LEVEL AS `flutter:`
+# flutter_launcher_icons config (same level as `flutter:`)
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/app_logo.jpg" # <-- 4. STRONGLY RECOMMEND USING A .PNG
+  image_path: "assets/app_logo.jpg" # Prefer .png if possible
   min_sdk_android: 21
 
-# Also add the splash screen config here
+# Splash screen config (same level as above)
 flutter_native_splash:
   color: "#F4F6FD"
-  image: assets/app_logo.jpg
+  image: "assets/app_logo.jpg"

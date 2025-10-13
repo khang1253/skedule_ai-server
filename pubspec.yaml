@@ -20,6 +20,7 @@ dependencies:
   draggable_fab: ^0.1.4 # <-- Correct package name
   flutter_launcher_icons: ^0.13.1
   flutter_native_splash: ^2.4.0 # For splash screen
+  image_picker: ^1.2.0
 
 dev_dependencies:
   flutter_test:

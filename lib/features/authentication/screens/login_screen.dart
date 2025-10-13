@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:skedule/main.dart';
 import 'signup_screen.dart';
+import 'dart:developer';
+import 'dart:async';
+
+// Không cần import AuthGate ở đây nữa
+// import 'package:skedule/auth_gate.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -24,10 +29,13 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // --- CÁC HÀM LOGIC (Giữ nguyên) ---
+  // --- CÁC HÀM LOGIC ---
   String _translateAuthException(AuthException e) {
     if (e.message.contains('Invalid login credentials')) {
       return 'Email hoặc mật khẩu không chính xác.';
+    }
+    if (e.message.contains('Email not confirmed')) {
+      return 'Tài khoản chưa được xác thực email.';
     }
     return 'Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.';
   }
@@ -40,27 +48,52 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _googleSignIn() async {
+    if (_isLoading) return;
+    setState(() { _isLoading = true; });
+
     try {
+      log('LoginScreen: Attempting Google sign-in...');
       await supabase.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: 'io.supabase.skedule://login-callback',
       );
+      log('LoginScreen: Google sign-in command finished.');
+      // XONG! AuthGate sẽ tự xử lý việc chuyển hướng khi nhận được sự kiện đăng nhập thành công.
     } on AuthException catch (e) {
       _showErrorSnackBar(_translateAuthException(e));
+    } finally {
+      // Chỉ set isLoading = false nếu không thành công, vì nếu thành công,
+      // màn hình này sẽ bị thay thế, không cần build lại.
+      if (mounted && supabase.auth.currentSession == null) {
+        setState(() { _isLoading = false; });
+      }
     }
   }
 
   Future<void> _signIn() async {
+    if (_isLoading) return;
     setState(() { _isLoading = true; });
+
     try {
+      log('LoginScreen: Attempting password sign-in...');
       await supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-      );
+      ).timeout(const Duration(seconds: 10));
+      log('LoginScreen: Password sign-in command finished (SUCCESS).');
+      // XONG! AuthGate sẽ tự xử lý việc chuyển hướng.
+    } on TimeoutException {
+      _showErrorSnackBar('Lỗi kết nối: Yêu cầu đăng nhập bị Timeout.');
     } on AuthException catch (e) {
+      log('LoginScreen Auth Error: ${e.message}');
       _showErrorSnackBar(_translateAuthException(e));
+    } catch (e) {
+      log('LoginScreen General Error: ${e.toString()}');
+      _showErrorSnackBar('Đã xảy ra lỗi không mong muốn: ${e.toString()}');
     } finally {
-      if (mounted) { setState(() { _isLoading = false; }); }
+      if (mounted && supabase.auth.currentSession == null) {
+        setState(() { _isLoading = false; });
+      }
     }
   }
 
@@ -93,7 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- GIAO DIỆN ---
+  // --- GIAO DIỆN (Giữ nguyên) ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -121,17 +154,8 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // === THAY ĐỔI LOGO TẠI ĐÂY ===
-          // Từ CircleAvatar...
-          // const CircleAvatar(
-          //   radius: 30, backgroundColor: Color(0xFF4A6C8B),
-          //   child: Text('S', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-          // ),
-          // ...thành Image.asset
           Image.asset('assets/app_logo.jpg', height: 60),
-          // =============================
           const SizedBox(height: 16),
-          // Sửa lại tên app cho nhất quán
           const Text('Welcome to Skedule', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF333333))),
           const SizedBox(height: 8),
           Text('Sign in to your account', style: TextStyle(color: Colors.grey[600])),

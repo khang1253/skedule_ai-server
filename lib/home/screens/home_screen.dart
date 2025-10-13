@@ -1,4 +1,4 @@
-// lib/screens/home/home_screen.dart
+// lib/home/screens/home_screen.dart
 
 import 'package:flutter/material.dart';
 // 1. Import package đúng

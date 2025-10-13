@@ -2,10 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
+
+import 'package:skedule/home/screens/home_screen.dart'; // Sửa đường dẫn nếu cần
 import 'package:skedule/features/authentication/screens/login_screen.dart';
-import 'package:skedule/features/authentication/screens/new_password_screen.dart';
-// === IMPORT ĐÚNG FILE HOME MỚI ===
-import 'package:skedule/home/screens/home_screen.dart';
+import 'package:skedule/features/authentication/screens/new_password_screen.dart'; // Import màn hình mới
 import 'package:skedule/main.dart';
 
 class AuthGate extends StatefulWidget {
@@ -16,34 +17,57 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
+  late final StreamSubscription<AuthState> _authSubscription;
+
+  // Biến cờ để theo dõi trạng thái khôi phục mật khẩu
+  bool _isPasswordRecovery = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _authSubscription = supabase.auth.onAuthStateChange.listen((data) {
+      final event = data.event;
+
+      // Nếu sự kiện là passwordRecovery, bật cờ và build lại UI
+      if (event == AuthChangeEvent.passwordRecovery) {
+        setState(() {
+          _isPasswordRecovery = true;
+        });
+      }
+      // Nếu người dùng đăng xuất (sau khi đổi pass xong), tắt cờ và build lại UI
+      else if (event == AuthChangeEvent.signedOut) {
+        setState(() {
+          _isPasswordRecovery = false;
+        });
+      }
+      // Với các sự kiện khác như đăng nhập, chỉ cần build lại
+      else {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // StreamBuilder là nơi xử lý toàn bộ logic điều hướng
-    return StreamBuilder<AuthState>(
-      stream: supabase.auth.onAuthStateChange,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
+    // Ưu tiên cao nhất: Nếu đang trong luồng khôi phục mật khẩu,
+    // luôn hiển thị màn hình NewPasswordScreen.
+    if (_isPasswordRecovery) {
+      return const NewPasswordScreen();
+    }
 
-        // 1. Bắt sự kiện PASSWORD_RECOVERY (Ưu tiên cao nhất)
-        // Dẫn thẳng đến màn hình nhập mật khẩu mới.
-        if (snapshot.hasData && snapshot.data!.event == AuthChangeEvent.passwordRecovery) {
-          return const NewPasswordScreen();
-        }
-
-        // 2. Kiểm tra trạng thái ĐÃ ĐĂNG NHẬP
-        // Session phải tồn tại và không phải là trạng thái recovery.
-        if (snapshot.hasData && snapshot.data!.session != null) {
-          // === ĐIỀU HƯỚNG TỚI MÀN HÌNH MỚI CHÍNH XÁC ===
-          return const HomeScreen();
-        }
-
-        // 3. Mặc định: Trạng thái ĐĂNG XUẤT (hoặc các lỗi khác)
-        else {
-          return const LoginScreen();
-        }
-      },
-    );
+    // Logic cũ: Kiểm tra session để quyết định giữa HomeScreen và LoginScreen
+    final session = supabase.auth.currentSession;
+    if (session != null) {
+      return const HomeScreen();
+    } else {
+      return const LoginScreen();
+    }
   }
 }

@@ -1,41 +1,45 @@
-// lib/screens/preferences/preferences_sheet.dart
+// lib/home/screens/preferences_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:skedule/main.dart'; // Để lấy biến supabase
+import 'package:skedule/main.dart';
+import 'dart:developer';
 
 class PreferencesSheet extends StatelessWidget {
   const PreferencesSheet({super.key});
 
-  // --- HÀM LOGIC LOGOUT ---
+  // --- HÀM LOGOUT ĐÃ ĐƯỢC VIẾT LẠI, ĐƠN GIẢN VÀ ĐÚNG ĐẮN ---
   Future<void> _signOut(BuildContext context) async {
-    // Đóng bottom sheet trước khi thực hiện logout để tránh lỗi context
-    if (context.mounted) {
-      Navigator.of(context).pop();
-    }
-
     try {
+      // 1. Đóng bottom sheet (tùy chọn, nhưng nên có để UI mượt hơn)
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // 2. Chỉ cần gọi signOut. AuthGate sẽ tự động phát hiện sự kiện
+      // và chuyển người dùng về màn hình LoginScreen.
       await supabase.auth.signOut();
-      // AuthGate sẽ tự động phát hiện thay đổi và điều hướng về màn hình Login
-    } on AuthException catch (e) {
-      // Xử lý nếu có lỗi trong quá trình logout (hiếm gặp)
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Lỗi đăng xuất: ${e.message}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+
+    } catch (e) {
+      log('Error during sign out: ${e.toString()}', error: e);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi không xác định khi đăng xuất: ${e.toString()}.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  // --- GIAO DIỆN ---
+  // --- GIAO DIỆN CHÍNH ---
   @override
   Widget build(BuildContext context) {
-    // Lấy thông tin người dùng hiện tại (dữ liệu giả, sẽ thay bằng Supabase sau)
     final user = supabase.auth.currentUser;
-    final userEmail = user?.email ?? 'john.doe@example.com';
-    final userName = user?.userMetadata?['name'] ?? 'John Doe';
-    final userInitials = userName.isNotEmpty ? userName.substring(0, 1).toUpperCase() : 'JD';
+    final userEmail = user?.email ?? 'N/A';
+    final userName = user?.userMetadata?['name'] ?? user?.email?.split('@').first ?? 'Người dùng';
+    final userInitials = userName.isNotEmpty ? userName.substring(0, 1).toUpperCase() : 'U';
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -43,41 +47,30 @@ class PreferencesSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           _buildHeader(context),
           const SizedBox(height: 16),
-          // Tabs (hiện tại chỉ là giao diện)
           _buildTabs(),
           const SizedBox(height: 24),
-
-          // --- PHẦN CHÍNH: TÀI KHOẢN ---
           const Text('Account Info', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 16),
-
           _buildAccountInfoCard(userInitials, userName, userEmail),
           const SizedBox(height: 16),
-
           _buildInfoTile(icon: Icons.email_outlined, text: userEmail),
-          _buildInfoTile(icon: Icons.calendar_today_outlined, text: 'Member Since January 2024'), // Dữ liệu giả
-
+          _buildInfoTile(icon: Icons.calendar_today_outlined, text: 'Member Since January 2024'),
           const Divider(height: 32),
-
           _buildActionTile(
             context: context,
             icon: Icons.person_outline,
             text: 'Edit Profile',
             onTap: () { /* TODO: Mở màn hình chỉnh sửa profile */ },
           ),
-
-          // === NÚT LOGOUT ===
           _buildActionTile(
             context: context,
             icon: Icons.logout,
             text: 'Sign Out',
             color: Colors.red,
-            onTap: () => _signOut(context), // Gọi hàm logout khi nhấn
+            onTap: () => _signOut(context),
           ),
-
           const SizedBox(height: 24),
           const Center(child: Text('Skedule v1.0.0', style: TextStyle(color: Colors.grey))),
         ],
@@ -85,7 +78,7 @@ class PreferencesSheet extends StatelessWidget {
     );
   }
 
-  // --- CÁC WIDGET PHỤ ---
+  // --- CÁC WIDGET PHỤ (ĐÃ ĐƯA VÀO BÊN TRONG CLASS) ---
   Widget _buildHeader(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -212,4 +205,4 @@ class PreferencesSheet extends StatelessWidget {
       onTap: onTap,
     );
   }
-}
+} // <--- Dấu ngoặc quan trọng kết thúc class PreferencesSheet

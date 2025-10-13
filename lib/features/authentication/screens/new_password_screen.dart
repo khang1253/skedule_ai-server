@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:skedule/main.dart';
-// import 'login_screen.dart'; // Không cần import vì AuthGate sẽ điều hướng
 
 class NewPasswordScreen extends StatefulWidget {
   const NewPasswordScreen({super.key});
@@ -15,75 +14,84 @@ class NewPasswordScreen extends StatefulWidget {
 class _NewPasswordScreenState extends State<NewPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
 
+  /// Xử lý việc cập nhật mật khẩu mới.
   Future<void> _updatePassword() async {
+    // Chỉ tiếp tục nếu form hợp lệ
     if (!_formKey.currentState!.validate()) return;
 
     setState(() { _isLoading = true; });
 
     try {
-      // Supabase tự động biết user nào cần đổi pass dựa vào session từ link
+      // Supabase tự động biết người dùng nào cần đổi mật khẩu dựa vào session từ link.
       await supabase.auth.updateUser(
         UserAttributes(password: _passwordController.text.trim()),
       );
 
-      if (mounted) {
-        // 1. Gửi thông báo
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đổi mật khẩu thành công! Vui lòng đăng nhập lại.'),
-            backgroundColor: Colors.green,
-          ),
-        );
+      if (!mounted) return;
 
-        // 2. Đăng xuất session tạm thời (QUAN TRỌNG: Kích hoạt AuthChangeEvent.signedOut)
-        await supabase.auth.signOut();
+      // 1. Gửi thông báo thành công.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đổi mật khẩu thành công! Vui lòng đăng nhập lại.'),
+          backgroundColor: Colors.green,
+        ),
+      );
 
-        // 3. LOẠI BỎ điều hướng cứng bằng Navigator.
-        // AuthGate sẽ nhận sự kiện signedOut và tự điều hướng về LoginScreen.
+      // 2. Đăng xuất session tạm thời để kích hoạt AuthGate điều hướng về màn hình đăng nhập.
+      await supabase.auth.signOut();
 
-        /*
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-              (route) => false,
-        );
-        */
-      }
     } on AuthException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
     } finally {
-      if (mounted) { setState(() { _isLoading = false; }); }
+      if (mounted) {
+        setState(() { _isLoading = false; });
+      }
     }
   }
 
   @override
   void dispose() {
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tạo Mật Khẩu Mới')),
+      appBar: AppBar(
+        title: const Text('Tạo Mật Khẩu Mới'),
+        centerTitle: true,
+      ),
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Vui lòng nhập mật khẩu mới của bạn.'),
+                const Text(
+                  'Vui lòng nhập mật khẩu mới của bạn.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16),
+                ),
                 const SizedBox(height: 24),
+
+                // Trường nhập mật khẩu mới
                 TextFormField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(labelText: 'Mật khẩu mới'),
+                  decoration: const InputDecoration(
+                    labelText: 'Mật khẩu mới',
+                    border: OutlineInputBorder(),
+                  ),
                   obscureText: true,
                   validator: (value) {
                     if (value == null || value.length < 6) {
@@ -92,12 +100,35 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+
+                // Trường xác nhận mật khẩu
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  decoration: const InputDecoration(
+                    labelText: 'Xác nhận mật khẩu',
+                    border: OutlineInputBorder(),
+                  ),
+                  obscureText: true,
+                  validator: (value) {
+                    if (value != _passwordController.text) {
+                      return 'Mật khẩu xác nhận không khớp';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 32),
+
+                // Nút xác nhận hoặc chỉ báo tải
                 _isLoading
-                    ? const CircularProgressIndicator()
+                    ? const Center(child: CircularProgressIndicator())
                     : ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
+                  ),
                   onPressed: _updatePassword,
-                  child: const Text('Xác nhận'),
+                  child: const Text('Xác Nhận'),
                 ),
               ],
             ),

@@ -1,4 +1,4 @@
-// lib/features/home/screens/ai_agent_screen.dart
+// lib/home/screens/ai_agent_screen.dart
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:skedule/main.dart';
 
-// === TÊN CLASS ĐÃ ĐƯỢC ĐỔI ===
 class AiAgentScreen extends StatefulWidget {
   const AiAgentScreen({super.key});
 
@@ -30,7 +29,12 @@ class _AiAgentScreenState extends State<AiAgentScreen> {
   Future<void> _signOut() async {
     try {
       await supabase.auth.signOut();
-      // Không cần Navigator, AuthGate sẽ tự động xử lý
+
+      // QUAN TRỌNG: Đóng màn hình AI để AuthGate có thể điều hướng từ Home
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

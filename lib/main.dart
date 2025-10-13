@@ -1,23 +1,30 @@
 // lib/main.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:skedule/auth_gate.dart'; // <<< Sửa import
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:skedule/auth_gate.dart';
+
+// BỎ navigatorKey và hàm _listenForAuthEvents
+// final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
-  await dotenv.load(fileName: ".env");
   WidgetsFlutterBinding.ensureInitialized();
+
+  await dotenv.load(fileName: ".env");
 
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
+  // KHÔNG CẦN GỌI HÀM LẮNG NGHE Ở ĐÂY NỮA
+  // _listenForAuthEvents();
+
   runApp(const MyApp());
 }
 
-final supabase = Supabase.instance.client;
+// HÀM _listenForAuthEvents ĐÃ BỊ XÓA
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -25,13 +32,14 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Skedule App',
+      title: 'Skedule',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF4A6C8B)),
-        useMaterial3: true,
+        primarySwatch: Colors.blue,
       ),
-      debugShowCheckedModeBanner: false,
-      home: const AuthGate(), // <<< Bắt đầu với AuthGate
+      // KHÔNG CẦN navigatorKey ở đây nữa
+      home: const AuthGate(),
     );
   }
 }
+
+final supabase = Supabase.instance.client;

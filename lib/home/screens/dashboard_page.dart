@@ -1,4 +1,4 @@
-// lib/screens/home/dashboard_page.dart
+// lib/home/screens/dashboard_page.dart
 import 'package:flutter/material.dart';
 import 'package:skedule/widgets/stat_card.dart'; // Import widget
 import 'package:skedule/widgets/task_card.dart'; // Import widget

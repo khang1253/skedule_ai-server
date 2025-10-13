@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:skedule/main.dart';
+import 'dart:developer';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -26,7 +27,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  // --- CÁC HÀM LOGIC (Giữ nguyên) ---
+  // --- CÁC HÀM LOGIC ---
   void _showSnack(String message, {Color color = Colors.red}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -45,7 +46,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final userExists = await supabase.rpc(
         'check_if_user_exists',
         params: {'user_email': email},
-      );
+      ) as bool;
 
       if (mounted && userExists == true) {
         _showSnack('Tài khoản đã tồn tại. Vui lòng đăng nhập.', color: Colors.orange);
@@ -58,7 +59,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _showSnack('Đăng ký thành công! Vui lòng kiểm tra email để xác thực.', color: Colors.green);
         Navigator.of(context).pop();
       }
+    } on AuthException catch (e) {
+      _showSnack('Lỗi đăng ký: ${e.message}');
     } catch (error) {
+      log('Signup Error: ${error.toString()}', error: error);
       _showSnack('Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -95,15 +99,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // === THAY ĐỔI LOGO TẠI ĐÂY ===
-            // Từ CircleAvatar...
-            // const CircleAvatar(
-            //   radius: 30, backgroundColor: Color(0xFF4A6C8B),
-            //   child: Text('S', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-            // ),
-            // ...thành Image.asset
             Image.asset('assets/app_logo.jpg', height: 60),
-            // =============================
             const SizedBox(height: 16),
             const Text('Create your account', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF333333))),
             const SizedBox(height: 32),
@@ -114,7 +110,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             const SizedBox(height: 16),
             _buildTextField(
               label: 'Password', controller: _passwordController, isObscure: true,
-              validator: (v) => (v == null || v.length < 6) ? 'Tối thiểu 6 ký tự' : null,
+              validator: (v) => (v == null || v.length < 6) ? 'Mật khẩu phải có tối thiểu 6 ký tự' : null,
             ),
             const SizedBox(height: 16),
             _buildTextField(
@@ -127,11 +123,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : ElevatedButton(
+
                 onPressed: _signUp,
+
                 style: ElevatedButton.styleFrom(
+
                   backgroundColor: const Color(0xFF4A6C8B),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+
                 ),
                 child: const Text('Sign Up', style: TextStyle(fontSize: 16, color: Colors.white)),
               ),
@@ -153,7 +153,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // --- WIDGETS PHỤ (Giữ nguyên) ---
+  // --- WIDGETS PHỤ ---
   Widget _buildTextField({required String label, required TextEditingController controller, bool isObscure = false, TextInputType keyboardType = TextInputType.text, String? Function(String?)? validator}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF333333))),

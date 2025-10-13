@@ -30,6 +30,16 @@ from utils.thoi_gian_tu_nhien import parse_natural_time
 
 # --- 1. CẤU HÌNH & KẾT NỐI ---
 load_dotenv()
+
+# *** THAY ĐỔI QUAN TRỌNG: CHỈ ĐỊNH ĐƯỜNG DẪN FFmpeg MỘT CÁCH TƯỜNG MINH ***
+ffmpeg_path = os.getenv("FFMPEG_PATH")
+if ffmpeg_path and os.path.exists(ffmpeg_path):
+    AudioSegment.converter = ffmpeg_path
+    print(f"✅ Đã tìm thấy và sử dụng FFmpeg tại: {ffmpeg_path}")
+else:
+    print("⚠️ Cảnh báo: Không tìm thấy FFmpeg. Chức năng xử lý giọng nói có thể không hoạt động.")
+
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -42,7 +52,9 @@ engine: Engine = create_engine(
     DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 llm_brain = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash", google_api_key=GEMINI_API_KEY, temperature=0.7)
+    model="gemini-2.5-flash", google_api_key=GEMINI_API_KEY, temperature=0.7)
+
+# --- PHẦN CÒN LẠI CỦA FILE GIỮ NGUYÊN ---
 
 # --- 2. XÁC THỰC NGƯỜI DÙNG ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -61,7 +73,7 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> str:
             detail="Token không hợp lệ hoặc đã hết hạn.",
         )
 
-# --- 3. CÁC HÀM XỬ LÝ GIỌNG NÓI (MỚI) ---
+# --- 3. CÁC HÀM XỬ LÝ GIỌNG NÓI (ĐÃ NÂNG CẤP) ---
 
 
 def text_to_base64_audio(text: str) -> str:
@@ -80,31 +92,48 @@ def text_to_base64_audio(text: str) -> str:
 
 
 async def audio_to_text(audio_file: UploadFile) -> str:
-    """Nhận file âm thanh, chuyển đổi và nhận dạng thành văn bản."""
+    """Nhận file âm thanh, kiểm tra, chuyển đổi và nhận dạng thành văn bản."""
     r = sr.Recognizer()
     try:
-        # Đọc file upload vào bộ nhớ
         audio_bytes = await audio_file.read()
         audio_fp = io.BytesIO(audio_bytes)
 
-        # Dùng pydub để mở audio từ bất kỳ định dạng nào và export ra WAV
         sound = AudioSegment.from_file(audio_fp)
+
+        # Kiểm tra độ dài âm thanh
+        if len(sound) < 500:  # pydub đo bằng mili giây
+            print("🎤 Lỗi: File âm thanh quá ngắn.")
+            raise HTTPException(
+                status_code=400, detail="File âm thanh quá ngắn. Vui lòng nhấn giữ nút micro để nói.")
+
         wav_fp = io.BytesIO()
         sound.export(wav_fp, format="wav")
         wav_fp.seek(0)
 
         with sr.AudioFile(wav_fp) as source:
             audio_data = r.record(source)
-            text = r.recognize_google(audio_data, language="vi-VN")
-            print(f"🎤 Văn bản nhận dạng được: {text}")
-            return text
+            try:
+                text = r.recognize_google(audio_data, language="vi-VN")
+                print(f"🎤 Văn bản nhận dạng được: {text}")
+                return text
+            except sr.UnknownValueError:
+                print("🎤 Lỗi: Google Speech Recognition không thể hiểu được âm thanh.")
+                raise HTTPException(
+                    status_code=400, detail="Rất tiếc, tôi không thể nghe rõ bạn nói gì. Vui lòng thử lại.")
+            except sr.RequestError as e:
+                print(
+                    f"🎤 Lỗi: Không thể kết nối đến Google Speech Recognition; {e}")
+                raise HTTPException(
+                    status_code=503, detail=f"Dịch vụ nhận dạng giọng nói tạm thời không khả dụng.")
+
     except Exception as e:
         print(f"Lỗi STT: {e}")
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(
             status_code=400, detail=f"Không thể xử lý file âm thanh: {e}")
 
 # --- 4. CÁC CÔNG CỤ (TOOLS) CHO AGENT ---
-# (Toàn bộ các tool cũ giữ nguyên, không thay đổi)
 
 
 @tool
@@ -198,6 +227,30 @@ def chinh_sua_task(tieu_de_cu: str, thoi_gian_moi: str, user_id: str) -> str:
 
 
 @tool
+def danh_dau_task_hoan_thanh(tieu_de: str, user_id: str) -> str:
+    """Đánh dấu một công việc là đã hoàn thành dựa vào tiêu đề của nó."""
+    try:
+        with engine.connect() as connection:
+            with connection.begin() as transaction:
+                # Dùng unaccent và ILIKE để tìm kiếm chính xác và linh hoạt
+                query = text("""
+                    UPDATE tasks
+                    SET is_completed = TRUE
+                    WHERE unaccent(title) ILIKE unaccent(:title) AND user_id = :user_id;
+                """)
+                result = connection.execute(
+                    query, {"title": f"%{tieu_de}%", "user_id": user_id})
+                transaction.commit()
+
+                if result.rowcount > 0:
+                    return f"👍 Rất tốt! Đã đánh dấu '{tieu_de}' là đã hoàn thành."
+                else:
+                    return f"🤔 Không tìm thấy công việc nào có tên '{tieu_de}' để đánh dấu hoàn thành."
+    except Exception as e:
+        return f"❌ Lỗi khi đánh dấu hoàn thành: {e}"
+
+
+@tool
 def tom_tat_tien_do(user_id: str) -> str:
     """Cung cấp tóm tắt về lịch trình của người dùng. Dùng khi người dùng hỏi chung chung."""
     try:
@@ -213,17 +266,17 @@ def tom_tat_tien_do(user_id: str) -> str:
                 completed_query, {"user_id": user_id}).scalar_one()
 
             upcoming_query = text(
-                "SELECT t.title, s.start_time FROM schedules s JOIN tasks t ON s.task_id = t.id WHERE s.user_id = :user_id AND s.start_time > NOW() ORDER BY s.start_time ASC LIMIT 3;")
+                "SELECT t.title, s.start_time FROM schedules s JOIN tasks t ON s.task_id = t.id WHERE s.user_id = :user_id AND s.start_time > NOW() AND t.is_completed = FALSE ORDER BY s.start_time ASC LIMIT 3;")
             upcoming_results = connection.execute(
                 upcoming_query, {"user_id": user_id}).fetchall()
 
             summary = f"Tổng quan lịch trình của bạn:\n- 📊 Tổng cộng: {total_tasks} công việc.\n- ✅ Hoàn thành: {completed_tasks} công việc.\n"
             if upcoming_results:
-                summary += "- 🗓️ Các lịch trình sắp tới:\n" + \
+                summary += "- 🗓️ Các lịch trình chưa hoàn thành sắp tới:\n" + \
                     "\n".join(
                         [f"  - '{row.title}' lúc {row.start_time.strftime('%H:%M %d/%m')}" for row in upcoming_results])
             else:
-                summary += "- 🗓️ Bạn không có lịch trình nào sắp tới."
+                summary += "- 🗓️ Bạn không có lịch trình nào sắp tới hoặc tất cả đều đã hoàn thành."
             return summary
     except Exception as e:
         if "is_completed" in str(e):
@@ -232,9 +285,15 @@ def tom_tat_tien_do(user_id: str) -> str:
 
 
 # --- 5. LẮP RÁP AGENT & BỘ NHỚ ---
-# (Phần này giữ nguyên)
-tools_list = [tao_task_va_len_lich, xoa_task_theo_lich,
-              tim_lich_trinh, chinh_sua_task, tom_tat_tien_do]
+tools_list = [
+    tao_task_va_len_lich,
+    xoa_task_theo_lich,
+    tim_lich_trinh,
+    chinh_sua_task,
+    danh_dau_task_hoan_thanh,  # Thêm tool mới vào danh sách
+    tom_tat_tien_do
+]
+
 today = date.today()
 system_prompt_template = f"""
 Bạn là một trợ lý lịch trình AI hữu ích và thân thiện tên là Skedule.
@@ -242,10 +301,11 @@ BỐI CẢNH: Hôm nay là {today.strftime('%A, %d/%m/%Y')}.
 QUY TẮC:
 1. Luôn sử dụng các công cụ (tools) có sẵn để thực hiện yêu cầu.
 2. Luôn sử dụng `user_id` được cung cấp trong prompt để gọi tool.
-3. ***RẤT QUAN TRỌNG***: Khi gọi tool `tim_lich_trinh`, BẮT BUỘC phải truyền ngày tháng theo định dạng 'YYYY-MM-DD'. Ví dụ: '2025-10-31'.
-4. Sau khi tool chạy xong, hãy diễn giải kết quả đó thành một câu trả lời tự nhiên, đầy đủ và lịch sự.
-5. Nếu người dùng hỏi chung chung như "tôi có lịch trình gì không?", hãy sử dụng tool `tom_tat_tien_do`.
-6. Đừng chỉ trả về kết quả thô từ tool. Hãy trò chuyện!
+3. ***RẤT QUAN TRỌNG***: Khi gọi tool `tim_lich_trinh`, BẮT BUỘC phải truyền ngày tháng theo định dạng 'YYYY-MM-DD'.
+4. Khi người dùng muốn đánh dấu một công việc là "xong", "hoàn thành", "đã làm", hãy sử dụng tool `danh_dau_task_hoan_thanh`.
+5. Sau khi tool chạy xong, hãy diễn giải kết quả đó thành một câu trả lời tự nhiên, đầy đủ và lịch sự.
+6. Nếu người dùng hỏi chung chung như "tôi có lịch trình gì không?", hãy sử dụng tool `tom_tat_tien_do`.
+7. Đừng chỉ trả về kết quả thô từ tool. Hãy trò chuyện!
 """
 prompt = ChatPromptTemplate.from_messages([
     ("system", system_prompt_template),
@@ -271,11 +331,8 @@ agent_with_chat_history = RunnableWithMessageHistory(
     input_messages_and_history_passthrough=True,
 )
 
-
-# --- 6. API SERVER (ĐÃ NÂNG CẤP) ---
-app = FastAPI(title="Skedule AI Agent API", version="2.0.0 (With Voice)")
-
-# Định nghĩa model cho phản hồi, bao gồm cả audio
+# --- 6. API SERVER ---
+app = FastAPI(title="Skedule AI Agent API", version="2.3.0 (Final Voice Fix)")
 
 
 class ChatResponse(BaseModel):
@@ -295,7 +352,6 @@ async def handle_chat_request(
     user_id: str = Depends(get_current_user_id)
 ):
     user_prompt = ""
-    # Ưu tiên xử lý file âm thanh nếu có
     if audio_file:
         user_prompt = await audio_to_text(audio_file)
     elif prompt:
@@ -307,7 +363,6 @@ async def handle_chat_request(
     session_id = f"user_{user_id}"
     print(f"📨 Prompt nhận từ user {user_id}: {user_prompt}")
 
-    # Gọi agent để xử lý prompt
     final_result = agent_with_chat_history.invoke(
         {"input": user_prompt, "user_id": user_id},
         config={"configurable": {"session_id": session_id}}
@@ -315,7 +370,6 @@ async def handle_chat_request(
     ai_text_response = final_result.get(
         "output", "Lỗi: Không có phản hồi từ agent.")
 
-    # Chuyển câu trả lời của AI thành giọng nói
     ai_audio_base64 = text_to_base64_audio(ai_text_response)
 
     return ChatResponse(

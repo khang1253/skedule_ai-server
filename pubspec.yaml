@@ -13,7 +13,12 @@ dependencies:
   # Core Packages
   supabase_flutter: ^2.5.2
   http: ^1.2.1
-
+  http_parser: ^4.0.2          # Phụ trợ cho http
+  permission_handler: ^11.0.1  # Để xin quyền sử dụng micro
+  record: ^6.1.2
+  # Để ghi âm giọng nói
+  audioplayers: ^5.2.1         # Để phát lại file âm thanh từ AI
+  path_provider: ^2.1.1        # Để lấy đường dẫn lưu file ghi âm
   # UI & Utility Packages
   cupertino_icons: ^1.0.8
   flutter_dotenv: ^5.1.0

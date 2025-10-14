@@ -9,9 +9,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // 1. IMPORT PACKAGE CẦN THIẾT
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-// Sử dụng class để code sạch sẽ hơn
 class ChatMessage {
   final String text;
   final bool isUser;
@@ -26,23 +25,19 @@ class AiAgentScreen extends StatefulWidget {
 }
 
 class _AiAgentScreenState extends State<AiAgentScreen> {
-  // === Quản lý State ===
   final TextEditingController _textController = TextEditingController();
   final List<ChatMessage> _messages = [];
   bool _isLoading = false;
 
-  // State cho việc ghi âm
   final AudioRecorder _audioRecorder = AudioRecorder();
   bool _isRecording = false;
 
-  // State cho việc phát âm thanh
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlaying = false;
 
   @override
   void initState() {
     super.initState();
-    // Thêm tin nhắn chào mừng ban đầu
     if (_messages.isEmpty) {
       _messages.insert(0, ChatMessage(text: "Chào bạn, tôi có thể giúp gì cho lịch trình của bạn?", isUser: false));
     }
@@ -55,8 +50,6 @@ class _AiAgentScreenState extends State<AiAgentScreen> {
     _audioPlayer.dispose();
     super.dispose();
   }
-
-  // --- HÀM XỬ LÝ LOGIC ---
 
   Future<void> _signOut() async {
     try {
@@ -72,33 +65,27 @@ class _AiAgentScreenState extends State<AiAgentScreen> {
     }
   }
 
-  /// Gửi request đến server AI với văn bản hoặc file âm thanh
   Future<void> _sendMessage({String? text, String? audioFilePath}) async {
-    // Kiểm tra xem có nội dung để gửi không
     if ((text == null || text.isEmpty) && audioFilePath == null) return;
 
     if(text != null) _textController.clear();
 
     setState(() {
-      if(text != null) _messages.insert(0, ChatMessage(text: text, isUser: true));
+      // Nếu là tin nhắn văn bản, thêm vào UI ngay
+      if(text != null) {
+        _messages.insert(0, ChatMessage(text: text, isUser: true));
+      }
       _isLoading = true;
     });
 
     try {
-      // Lấy Access Token từ Supabase
       final session = supabase.auth.currentSession;
       if (session == null) {
         _signOut();
         return;
       }
       final accessToken = session.accessToken;
-
-      // 2. LẤY URL TỪ FILE .ENV
       final serverUrl = dotenv.env['AI_SERVER_URL'];
-
-      // *** DÒNG CODE CHẨN ĐOÁN MỚI ***
-      // In ra URL mà ứng dụng đang thực sự sử dụng.
-      print("--- DEBUG: Đang cố gắng kết nối đến AI Server tại: $serverUrl ---");
 
       if (serverUrl == null || serverUrl.isEmpty) {
         _addMessageToChat("Lỗi cấu hình: Vui lòng kiểm tra biến AI_SERVER_URL trong file .env.", isUser: false);
@@ -107,54 +94,43 @@ class _AiAgentScreenState extends State<AiAgentScreen> {
       }
 
       var request = http.MultipartRequest('POST', Uri.parse('$serverUrl/chat'));
-
-      // THÊM HEADER CHO SUPABASE AUTH
       request.headers['Authorization'] = 'Bearer $accessToken';
-
-      // *** THAY ĐỔI QUAN TRỌNG: THÊM HEADER ĐỂ BỎ QUA CẢNH BÁO CỦA NGROK ***
       request.headers['ngrok-skip-browser-warning'] = 'true';
 
       if (text != null) {
         request.fields['prompt'] = text;
       } else if (audioFilePath != null) {
         request.files.add(await http.MultipartFile.fromPath(
-          'audio_file',
-          audioFilePath,
-          contentType: MediaType('audio', 'm4a'),
+          'audio_file', audioFilePath, contentType: MediaType('audio', 'm4a'),
         ));
       }
 
-      // *** THAY ĐỔI QUAN TRỌNG: THÊM TIMEOUT CHO REQUEST ***
-      final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 20),
-        onTimeout: () {
-          // Ném ra một lỗi cụ thể khi hết thời gian chờ
-          throw TimeoutException('Kết nối đến server AI quá lâu, vui lòng thử lại.');
-        },
-      );
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 45));
+      final responseBody = await streamedResponse.stream.bytesToString();
+      final decodedResponse = jsonDecode(responseBody);
 
-      String responseText;
       if (streamedResponse.statusCode == 200) {
-        final responseBody = await streamedResponse.stream.bytesToString();
+        final String? userPrompt = decodedResponse['user_prompt'];
+        final String responseText = decodedResponse['text_response'] ?? 'Lỗi: Không nhận được phản hồi.';
+        final String audioBase64 = decodedResponse['audio_base64'] ?? '';
 
-        // *** THAY ĐỔI QUAN TRỌNG: SỬA LẠI CÁCH GIẢI MÃ JSON ***
-        final decodedResponse = jsonDecode(responseBody);
+        // Nếu input là audio, giờ chúng ta mới thêm tin nhắn của người dùng vào UI
+        if (userPrompt != null) {
+          _addMessageToChat(userPrompt, isUser: true);
+        }
 
-        responseText = decodedResponse['text_response'] ?? 'Lỗi: Không nhận được phản hồi.';
-        final String audioBase64 = decodedResponse['audio_base_64'] ?? '';
+        _addMessageToChat(responseText, isUser: false);
 
         if (audioBase64.isNotEmpty) {
           _playAudio(audioBase64);
         }
       } else {
-        responseText = 'Lỗi server: ${streamedResponse.statusCode}.';
+        final String errorMessage = decodedResponse['detail'] ?? 'Lỗi không xác định từ server (${streamedResponse.statusCode}).';
+        _addMessageToChat('Lỗi: $errorMessage', isUser: false);
       }
-      _addMessageToChat(responseText, isUser: false);
-    } on TimeoutException catch (e) {
-      // Bắt lỗi timeout cụ thể
-      _addMessageToChat("Lỗi: ${e.message}", isUser: false);
+    } on TimeoutException {
+      _addMessageToChat("Lỗi: Kết nối đến server AI quá lâu.", isUser: false);
     } catch (e) {
-      // Bắt các lỗi kết nối khác
       _addMessageToChat("Lỗi kết nối: $e", isUser: false);
       print("--- DEBUG: Lỗi chi tiết: $e");
     } finally {
@@ -164,13 +140,12 @@ class _AiAgentScreenState extends State<AiAgentScreen> {
     }
   }
 
-  /// Bắt đầu hoặc dừng ghi âm
   Future<void> _handleRecord() async {
     if (_isRecording) {
       final path = await _audioRecorder.stop();
       if (path != null) {
         setState(() => _isRecording = false);
-        _addMessageToChat("Đang xử lý giọng nói...", isUser: true);
+        // Không thêm tin nhắn tạm thời nữa, chỉ gửi file đi
         _sendMessage(audioFilePath: path);
       }
     } else {
@@ -184,7 +159,6 @@ class _AiAgentScreenState extends State<AiAgentScreen> {
     }
   }
 
-  /// Giải mã Base64 và phát âm thanh
   Future<void> _playAudio(String base64Audio) async {
     try {
       setState(() => _isPlaying = true);
@@ -199,14 +173,12 @@ class _AiAgentScreenState extends State<AiAgentScreen> {
     }
   }
 
-  /// Thêm tin nhắn vào danh sách để hiển thị
   void _addMessageToChat(String text, {required bool isUser}) {
     setState(() {
       _messages.insert(0, ChatMessage(text: text, isUser: isUser));
     });
   }
 
-  // --- GIAO DIỆN ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(

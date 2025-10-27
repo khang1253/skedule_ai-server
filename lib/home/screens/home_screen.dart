@@ -1,9 +1,6 @@
-// lib/home/screens/home_screen.dart
-
 import 'package:flutter/material.dart';
-// 1. Import package đúng
 import 'package:draggable_fab/draggable_fab.dart';
-// 2. Dọn dẹp và sửa lại đường dẫn import cho nhất quán
+import 'package:skedule/home/screens/calendar_screen.dart'; // <<< ĐÃ THÊM DÒNG NÀY
 import 'package:skedule/home/screens/ai_agent_screen.dart';
 import 'package:skedule/home/screens/dashboard_page.dart';
 import 'package:skedule/home/screens/preferences_screen.dart';
@@ -18,11 +15,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
+  // === THAY ĐỔI Ở ĐÂY ===
+  // Thay thế widget giữ chỗ bằng CalendarScreen thật
   static final List<Widget> _mainPages = <Widget>[
     const DashboardPage(),
-    const Center(child: Text('Calendar Page')),
+    const CalendarScreen(),
     const Center(child: Text('Notes Page')),
   ];
+  // =====================
 
   void _showPreferencesSheet() {
     showModalBottomSheet(
@@ -50,25 +50,19 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 3. Đặt bong bóng chat AI vào đây, nó sẽ nổi trên body
       body: Stack(
         children: [
-          // Lớp nền: các trang chính của bạn (Dashboard, Calendar, ...)
           IndexedStack(
             index: _selectedIndex,
             children: _mainPages,
           ),
-
-          // Lớp nổi: Bong bóng chat AI, căn ở góc dưới bên phải
-          // Widget này không thể kéo thả, nhưng sẽ cố định ở vị trí đẹp
           Align(
             alignment: Alignment.bottomRight,
             child: Padding(
-              // Thêm padding để không bị che bởi Bottom Nav Bar
               padding: const EdgeInsets.only(right: 20, bottom: 90),
               child: FloatingActionButton(
-                heroTag: 'ai_fab', // Dùng heroTag khác để tránh lỗi
-                mini: true, // Kích thước nhỏ như bong bóng chat
+                heroTag: 'ai_fab',
+                mini: true,
                 backgroundColor: Colors.purple,
                 onPressed: () {
                   Navigator.of(context).push(
@@ -81,8 +75,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-
-      // 4. Sử dụng DraggableFab cho nút "Thêm Task" chính
       floatingActionButton: DraggableFab(
         child: FloatingActionButton(
           backgroundColor: const Color(0xFF4A6C8B),
@@ -98,6 +90,8 @@ class _HomeScreenState extends State<HomeScreen> {
         shape: const CircularNotchedRectangle(),
         notchMargin: 8.0,
         child: Row(
+          // === SỬA LỖI Ở ĐÂY ===
+          // Chỉ cần một "mainAxisAlignment:"
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
             _buildNavItem(icon: Icons.dashboard_rounded, label: 'Dashboard', index: 0),

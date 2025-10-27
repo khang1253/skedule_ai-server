@@ -3,10 +3,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
+import 'dart:developer'; // Thêm log để dễ debug
 
-import 'package:skedule/home/screens/home_screen.dart'; // Sửa đường dẫn nếu cần
+import 'package:skedule/home/screens/home_screen.dart';
 import 'package:skedule/features/authentication/screens/login_screen.dart';
-import 'package:skedule/features/authentication/screens/new_password_screen.dart'; // Import màn hình mới
+import 'package:skedule/features/authentication/screens/new_password_screen.dart';
+import 'package:skedule/features/authentication/screens/complete_profile_screen.dart';
 import 'package:skedule/main.dart';
 
 class AuthGate extends StatefulWidget {
@@ -18,33 +20,101 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   late final StreamSubscription<AuthState> _authSubscription;
-
-  // Biến cờ để theo dõi trạng thái khôi phục mật khẩu
   bool _isPasswordRecovery = false;
+  bool _isLoading = true;
+  Widget? _nextScreen; // Màn hình cần hiển thị
 
   @override
   void initState() {
     super.initState();
+    _initAuthListener();
+  }
 
-    _authSubscription = supabase.auth.onAuthStateChange.listen((data) {
+  void _initAuthListener() {
+    // 1. Đặt Stream Listener để theo dõi các sự kiện Auth
+    _authSubscription = supabase.auth.onAuthStateChange.listen((data) async {
       final event = data.event;
+      final session = data.session;
 
-      // Nếu sự kiện là passwordRecovery, bật cờ và build lại UI
+      if (!mounted) return; // Đảm bảo widget vẫn tồn tại
+
+      log('AuthGate Event: $event'); // Log sự kiện để debug
+
       if (event == AuthChangeEvent.passwordRecovery) {
         setState(() {
           _isPasswordRecovery = true;
+          _isLoading = false;
         });
+        return;
       }
-      // Nếu người dùng đăng xuất (sau khi đổi pass xong), tắt cờ và build lại UI
-      else if (event == AuthChangeEvent.signedOut) {
+
+      // Xử lý SignedOut hoặc UserUpdated (kích hoạt kiểm tra lại)
+      if (event == AuthChangeEvent.signedOut || event == AuthChangeEvent.userUpdated) {
         setState(() {
           _isPasswordRecovery = false;
+          _nextScreen = const LoginScreen();
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Xử lý SignedIn, InitialSession hoặc TokenRefreshed
+      if (session != null) {
+        await _handleLoggedIn(session.user.id);
+      } else {
+        setState(() {
+          _nextScreen = const LoginScreen();
+          _isLoading = false;
         });
       }
-      // Với các sự kiện khác như đăng nhập, chỉ cần build lại
-      else {
-        setState(() {});
+    });
+
+    // 2. Kiểm tra session ban đầu (ngay khi app khởi động)
+    final session = supabase.auth.currentSession;
+    if (session != null) {
+      _handleLoggedIn(session.user.id);
+    } else {
+      // Đặt giá trị ban đầu nếu không có session
+      _nextScreen = const LoginScreen();
+      _isLoading = false;
+    }
+  }
+
+  Future<void> _handleLoggedIn(String userId) async {
+    // Luôn bắt đầu bằng trạng thái loading
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Truy vấn profile, chỉ cần kiểm tra cột 'name' và maybeSingle()
+      // Các cột khác (gender, birth_date) có thể là NULL, không phải là điều kiện cản.
+      final Map<String, dynamic>? response = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', userId)
+          .maybeSingle(); // maybeSingle để xử lý khi profile chưa tồn tại
+
+      final profileName = response?['name'] as String?;
+
+      // Kiểm tra: Profile không tồn tại HOẶC tên là null HOẶC tên là chuỗi rỗng
+      if (response == null || profileName == null || profileName.isEmpty) {
+        log('Profile check: Incomplete. Redirecting to CompleteProfileScreen.');
+        _nextScreen = const CompleteProfileScreen();
+      } else {
+        log('Profile check: Complete. Redirecting to HomeScreen.');
+        _nextScreen = const HomeScreen();
       }
+    } catch (e) {
+      log('Error checking profile: $e', error: e);
+      // Xử lý lỗi (ví dụ: RLS Policy) bằng cách quay về màn hình đăng nhập
+      _nextScreen = const LoginScreen();
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
     });
   }
 
@@ -56,18 +126,20 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    // Ưu tiên cao nhất: Nếu đang trong luồng khôi phục mật khẩu,
-    // luôn hiển thị màn hình NewPasswordScreen.
+    // 1. Ưu tiên: Khôi phục mật khẩu
     if (_isPasswordRecovery) {
       return const NewPasswordScreen();
     }
 
-    // Logic cũ: Kiểm tra session để quyết định giữa HomeScreen và LoginScreen
-    final session = supabase.auth.currentSession;
-    if (session != null) {
-      return const HomeScreen();
-    } else {
-      return const LoginScreen();
+    // 2. Hiển thị loading
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
+
+    // 3. Hiển thị màn hình tiếp theo
+    // Sử dụng null-aware operator ?? để đảm bảo an toàn
+    return _nextScreen ?? const LoginScreen();
   }
 }
